@@ -151,9 +151,11 @@ class Encoder(nn.Module):
 class QuantizerModule(torch.nn.Module):
     def __init__(self, n_e, e_dim):
         super().__init__()
-        # n_e: number of embeddings, e_dim: embedding dimensions
+        # n_e: number of embeddings (size of codebook),
+        # e_dim: embedding dimensions (embed vec dim)
         # (1024, 512/1)
         self.embedding = nn.Embedding(n_e, e_dim)
+        # Embedding weights are initialized uniformly in the range [-1.0 / n_e, 1.0 / n_e]
         self.embedding.weight.data.uniform_(-1.0 / n_e, 1.0 / n_e)  # [1024, 512]
 
     # x: [1600, 512]
@@ -243,7 +245,7 @@ class Generator(torch.nn.Module):
         # starting from upsample_initial_channel=512
         self.conv_pre = weight_norm(
             Conv1d(h.Audio["codebook_weight"], h.upsample_initial_channel, 7, 1, padding=3))
-        res_block = ResBlock1 if h.resblock == '1' else ResBlock2
+        resblock = ResBlock1 if h.resblock == '1' else ResBlock2
 
         self.ups = nn.ModuleList()
         for i, (u, k) in enumerate(zip(h.upsample_rates, h.upsample_kernel_sizes)):
@@ -255,12 +257,12 @@ class Generator(torch.nn.Module):
                 )
             ))
 
-        self.res_blocks = nn.ModuleList()
+        self.resblocks = nn.ModuleList()
         ch = 0
         for i in range(len(self.ups)):
             ch = h.upsample_initial_channel // (2 ** (i + 1))
             for j, (k, d) in enumerate(zip(h.resblock_kernel_sizes, h.resblock_dilation_sizes)):
-                self.resblocks.append(res_block(h, ch, k, d))
+                self.resblocks.append(resblock(h, ch, k, d))
 
         self.conv_post = weight_norm(Conv1d(ch, 1, 7, 1, padding=3))
         self.ups.apply(init_weights)

@@ -13,6 +13,7 @@ from discriminators import MultiScaleDiscriminator, MultiPeriodDiscriminator, Mu
 from meldataset import get_dataset_filelist, MelDataset, mel_spectrogram
 from utils import scan_checkpoint, load_checkpoint, save_checkpoint, AttrDict, build_env, plot_spectrogram
 
+from tqdm import tqdm
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DistributedSampler, DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -53,33 +54,67 @@ def train(rank, a, h):
 
     ## load checkpoint to resume training
     ckpt_codec_path = ckpt_discriminators_optimizer_path = None
-    if os.path.isdir(a.checkpoint_path):
-        ckpt_codec_path = scan_checkpoint(a.checkpoint_path, 'generator_')
-        ckpt_discriminators_optimizer_path = scan_checkpoint(a.checkpoint_path, 'discriminators_and_optimizer_')
-
-    steps=0
+    steps = 0
     state_dict_discrim_and_optim = None
     state_dict_codec = None
-    last_epoch=-1
-    if ckpt_codec_path is not None and ckpt_discriminators_optimizer_path is not None:
-        state_dict_codec = load_checkpoint(ckpt_codec_path, device)
-        state_dict_discrim_and_optim = load_checkpoint(ckpt_discriminators_optimizer_path, device)
+    last_epoch = -1
+    if os.path.isdir(a.pretrain_checkpoint_path):
+        # load from pretrain model: TO DO THIS ENSURE SAME SETTING AS HIFI-CODEC.
+        ckpt_codec_path = scan_checkpoint(a.pretrain_checkpoint_path, 'HiFi-Codec')
+        if ckpt_codec_path is not None:
+            state_dict_codec = load_checkpoint(ckpt_codec_path, device)
 
-        # encoder-RVQ-decoder loading
-        generator.load_state_dict(state_dict_codec['generator'])
-        encoder.load_state_dict(state_dict_codec['encoder'])
-        quantizer.load_state_dict(state_dict_codec['quantizer'])
-        watermark_encoder.load_state_dict(state_dict_codec['watermark_encoder'])
-        watermark_decoder.load_state_dict(state_dict_codec['watermark_decoder'])
+            # load generator: generator is the same as HiFiCodec
+            generator.load_state_dict(state_dict_codec['generator'])
 
-        # discriminator and optimizer loading
-        mp_discriminator.load_state_dict(state_dict_discrim_and_optim['mpd'])
-        ms_discriminator.load_state_dict(state_dict_discrim_and_optim['msd'])
-        msstft_discriminator.load_state_dict(state_dict_discrim_and_optim['msstftd'])
+            # load encoder
+            encoder_state_dict = encoder.state_dict()
+            match_state_dict = {}
+            for k, v in state_dict_codec['encoder'].items():
+                # load only if they have the same name and shape
+                if k in encoder_state_dict and encoder_state_dict[k].shape == v.shape:
+                    match_state_dict[k] = v
+            encoder_state_dict.update(match_state_dict)
+            encoder.load_state_dict(encoder_state_dict)
 
-        # other loading
-        steps = state_dict_discrim_and_optim['steps'] + 1
-        last_epoch = state_dict_discrim_and_optim['epoch']
+            # load quantizer
+            quantizer_state_dict = quantizer.state_dict() # returns reference, not a deep copy
+            for residual_layer_idx in range(2):
+                old_prefix = f"quantizer_modules{'' if residual_layer_idx == 0 else '2'}"
+                new_prefix = f"quantizer_module_residual_list.{residual_layer_idx}"
+
+                for code_group_idx in range(quantizer.n_code_groups): # 2
+                    old_key = f"{old_prefix}.{code_group_idx}.embedding.weight" #quantizer_model2.1.embedding.weight
+                    new_key = f"{new_prefix}.{code_group_idx}.embedding.weight" # quantizer_module_residual_list.1.1.embedding.weight
+
+                    if old_key in state_dict_codec['quantizer'] and new_key in quantizer_state_dict:
+                        quantizer_state_dict[new_key].copy_(state_dict_codec['quantizer'][old_key])
+    else:
+        # load from previously saved result.
+        if os.path.isdir(a.checkpoint_path):
+            ckpt_codec_path = scan_checkpoint(a.checkpoint_path, 'generator_')
+            ckpt_discriminators_optimizer_path = scan_checkpoint(a.checkpoint_path, 'discriminators_and_optimizer_')
+
+
+        if ckpt_codec_path is not None and ckpt_discriminators_optimizer_path is not None:
+            state_dict_codec = load_checkpoint(ckpt_codec_path, device)
+            state_dict_discrim_and_optim = load_checkpoint(ckpt_discriminators_optimizer_path, device)
+
+            # encoder-RVQ-decoder loading
+            generator.load_state_dict(state_dict_codec['generator'])
+            encoder.load_state_dict(state_dict_codec['encoder'])
+            quantizer.load_state_dict(state_dict_codec['quantizer'])
+            watermark_encoder.load_state_dict(state_dict_codec['watermark_encoder'])
+            watermark_decoder.load_state_dict(state_dict_codec['watermark_decoder'])
+
+            # discriminator and optimizer loading
+            mp_discriminator.load_state_dict(state_dict_discrim_and_optim['mpd'])
+            ms_discriminator.load_state_dict(state_dict_discrim_and_optim['msd'])
+            msstft_discriminator.load_state_dict(state_dict_discrim_and_optim['msstftd'])
+
+            # other loading
+            steps = state_dict_discrim_and_optim['steps'] + 1
+            last_epoch = state_dict_discrim_and_optim['epoch']
 
 
     # ----------------------- Handling training and validation data distribution across GPUs ------------- *
@@ -147,7 +182,7 @@ def train(rank, a, h):
     # msstft_discriminator in the original code is not trained
 
     #--------------------------- Training Stage -----------------------------------*
-    for epoch in range(max(0, last_epoch), a.training_epochs):
+    for epoch in tqdm(range(max(0, last_epoch), a.training_epochs), desc="Epoch Progress", unit="epoch"):
         if h.num_gpus > 1:
             train_sampler.set_epoch(epoch)
         # logging epoch train time
@@ -156,7 +191,7 @@ def train(rank, a, h):
             print("Epoch: {}".format(epoch+1))
 
         # --------------------------batch training------------------------------------*
-        for i, batch in enumerate(train_loader):
+        for i, batch in tqdm(enumerate(train_loader), desc=f"Batch Progress (Epoch {epoch + 1})", unit="batch", total=len(train_loader)):
             # logging batch train time
             if rank == 0:
                 start_b = time.time()
@@ -436,6 +471,7 @@ def main():
     parser.add_argument('--validation_interval', default=500, type=int) # 20 1000 500
     parser.add_argument('--num_ckpt_keep', default=5, type=int) # 5
     parser.add_argument('--fine_tuning', default=False, type=bool)
+    parser.add_argument('--pretrain_checkpoint_path', default='')
 
     a = parser.parse_args()
 
