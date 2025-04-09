@@ -13,56 +13,62 @@ LRELU_SLOPE = 0.1
 
 # generate a random wm of size (32, 25), dim = 106 (all in-use ascii char), 25@106
 # return: (32, 25)
-def random_watermark(batch_size):
-    sign = torch.randint(low=0, high=DIGIT_SIZE, size=(batch_size, 25))
+def random_watermark(batch_size, h):
+    sign = torch.randint(low=0, high=h.Watermark["digit_size"], size=(batch_size, h.Watermark["capacity"]))
     return sign
 
 # cast a random wm to match with audio feature space
 class WatermarkEncoder(torch.nn.Module):
     def __init__(self, h):
         super(WatermarkEncoder, self).__init__()
-        self.h = h
-        self.embedding = nn.Embedding(num_embeddings=DIGIT_SIZE, embedding_dim = 32)
-        self.up_cast = nn.Sequential(
-            weight_norm(Linear(in_features=32, out_features=64)), # 2
-            nn.LeakyReLU(negative_slope=LRELU_SLOPE),
-            weight_norm(Linear(in_features=64, out_features=256)), # 4
-            nn.LeakyReLU(negative_slope=LRELU_SLOPE),
-            weight_norm(Linear(in_features=256, out_features=1024)) # 4
-        )
+        self.embedding = nn.Embedding(num_embeddings=h.Watermark['digit_size'], embedding_dim=h.Watermark['embed_dim'])
+        self.final_dim = h.Watermark["encoder_final_dim"]
+        assert self.final_dim * h.Watermark["capacity"] == 512 * 50
+        print("Watermark feature vector repeat:", 50/h.Watermark["capacity"], " times.")
+
+        upcast_dim = [h.Watermark["embed_dim"]] + h.Watermark["encoder_mlp_dims"] + [self.final_dim]
+        layers = []
+        for i in range(len(upcast_dim) - 2):
+            layers.append(weight_norm(nn.Linear(upcast_dim[i], upcast_dim[i + 1])))
+            layers.append(nn.LeakyReLU(negative_slope=LRELU_SLOPE))
+        # last layer (no activation)
+        layers.append(weight_norm(nn.Linear(upcast_dim[-2], upcast_dim[-1])))
+        self.up_cast = nn.Sequential(*layers)
 
     def forward(self, x):
-        x_e = self.embedding(x)  # (32, 25, 32)
         # (32, 25, 32) -> (32, 25, 1024)
-        x = self.up_cast(x_e)
-        fold = 2
-        # (32, 25, 1024) -> (32, 50, 512)
-        x = x.reshape(x.shape[0], x.shape[2]*fold, x.shape[2]//fold)
+        x = self.embedding(x)  # (batch, capacity, embed_dim): (32, 25, 32)
+        # (32, 25, 32) -> (32, 25, 1024)
+        x = self.up_cast(x)  # (batch, capacity, self.final_dim): (32, 25, 1024)
+        x = x.view(x.shape[0], 50, 512)  # (batch, 50, 512): (32, 50, 512)
         return x
 
-class WatermarkDecoder(torch.nn.Module):
+class WatermarkDecoder(nn.Module):
     def __init__(self, h):
         super(WatermarkDecoder, self).__init__()
-        self.recover = ResNet293(feat_dim=80, embed_dim=1024, pooling_func='MQMHASTP')
-        self.to_wm = nn.Sequential(
-            weight_norm(Linear(in_features=1024, out_features=512)),  # 2
-            nn.LeakyReLU(negative_slope=LRELU_SLOPE),
-            weight_norm(Linear(in_features=512, out_features=128)),  # 4
-            nn.LeakyReLU(negative_slope=LRELU_SLOPE),
-            weight_norm(Linear(in_features=128, out_features=25))
+        # resnet_embed_dim determines the output dimension of resnet.
+        self.recover = ResNet293(
+            feat_dim=h.Watermark['resnet_feat_dim'],
+            embed_dim=h.Watermark['resnet_embed_dim'],
+            pooling_func='MQMHASTP'
         )
+        self.final_dim = h.Watermark["capacity"]
+
+        dims = [h.Watermark['resnet_embed_dim']] + h.Watermark['decoder_mlp_dims'] + [self.final_dim]
+        layers = []
+        for i in range(len(dims) - 2):
+            layers.append(weight_norm(nn.Linear(dims[i], dims[i + 1])))
+            layers.append(nn.LeakyReLU(negative_slope=LRELU_SLOPE))
+        layers.append(weight_norm(nn.Linear(dims[-2], dims[-1])))
+        self.to_wm = nn.Sequential(*layers)
 
     # input (32, 80, 50)
     def forward(self, x):
-        # (batch_size, num_frames, num_mel_filters)
-        x = x.transpose(1, 2)
-        # (batch_size, embed_dim)
-        # intermediate, final: [(32, 1024), (32, 1024)] (supports 2 embedding layers)
-        x = self.recover(x)
-        # (32, 1024)
-        x = x[-1]
-        # (32, 25)
-        return self.to_wm(x)
+        # (batch_size, num_frames, num_mel_filters (80))
+        x = x.transpose(1, 2)  # (batch, 80, 50) -> (batch, 50, 80)
+        x = self.recover(x)[-1]  # (batch, 1024)
+        x = self.to_wm(x)  # (batch, 25)
+        return x
 
 
 def watermark_loss(reconstruct_sign, sign):

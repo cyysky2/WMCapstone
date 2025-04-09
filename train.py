@@ -199,7 +199,7 @@ def train(rank, a, h):
             # --------------------Loading data sample and pass to GPU memory--------*
             # mel: (32, 80, 50); audio: (32, 12000)
             mel_audio, audio, _, mel_audio_loss = batch
-            watermark = random_watermark(h.batch_size)
+            watermark = random_watermark(h.batch_size, h)
 
             mel_audio = mel_audio.to(device, non_blocking=True)
             audio = audio.to(device, non_blocking=True)
@@ -368,7 +368,7 @@ def train(rank, a, h):
                         # mel: (1, 80, 50); audio: (1, 12000), batch size = 1
                         mel_audio, audio, _, mel_audio_loss = batch
                         # (32, 25)
-                        watermark = random_watermark(mel_audio.shape[0])
+                        watermark = random_watermark(mel_audio.shape[0], h)
 
                         audio.to(device)
                         mel_audio_loss.to(device)

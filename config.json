@@ -25,6 +25,16 @@
 
     "sampling_rate": 24000,
 
+    "Watermark": {
+        "capacity": 25,
+        "digit_size": 106,
+        "embed_dim": 32,
+        "encoder_mlp_dims": [64, 256, 512],
+        "final_dim": 1024,
+        "resnet_feat_dim": 80,
+        "resnet_embed_dim": 1024,
+        "decoder_mlp_dims": [512, 128]
+    },
 
     "Audio": {"n_code_groups": 2,
     "residual_layer": 16,
