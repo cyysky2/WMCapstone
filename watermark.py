@@ -75,6 +75,13 @@ def watermark_loss(reconstruct_sign, sign):
     loss = func.cross_entropy(reconstruct_sign, sign)
     return loss
 
+def count_common_digit(watermarkA, watermarkB):
+    cnt = 0
+    for i in range(watermarkA.size(1)):
+        if watermarkA[0][i] == watermarkB[0][i]:
+            cnt += 1
+    return cnt
+
 def attack(y_g_hat, order_list=None):
     # attack is used for whole batch
     # order is tuple，[(CLP, 0.4), (RSP-16, 0.3), (Noise-W20, 0.3)]
