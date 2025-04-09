@@ -23,19 +23,19 @@ if __name__ == '__main__':
     a = parser.parse_args()
 
     # Paths to original LibriSpeech data
-    train_input_dir = 'LibriSpeech/LibriSpeech/train-clean-360'
-    val_input_dir = 'LibriSpeech/LibriSpeech/dev-clean'
-    test_input_dir = 'LibriSpeech/LibriSpeech/test-clean'
+    train_input_dir = '/root/autodl-tmp/LibriSpeech/LibriSpeech/train-clean-360'
+    val_input_dir = '/root/autodl-tmp/LibriSpeech/LibriSpeech/dev-clean'
+    test_input_dir = '/root/autodl-tmp/LibriSpeech/LibriSpeech/test-clean'
 
     # Output directories for wavs
-    train_output_dir = 'LibriSpeech/LibriSpeech_24k_wav/train-clean-360'
-    val_output_dir = 'LibriSpeech/LibriSpeech_24k_wav/dev-clean'
-    test_output_dir = 'LibriSpeech/LibriSpeech_24k_wav/test-clean'
+    train_output_dir = '/root/autodl-tmp/LibriSpeech/LibriSpeech_24k_wav/train-clean-360'
+    val_output_dir = '/root/autodl-tmp/LibriSpeech/LibriSpeech_24k_wav/dev-clean'
+    test_output_dir = '/root/autodl-tmp/LibriSpeech/LibriSpeech_24k_wav/test-clean'
 
     # Output file list paths
-    train_list_path = 'train_filelist.txt'
-    val_list_path = 'val_filelist.txt'
-    test_list_path = 'test_filelist.txt'
+    train_list_path = '/root/autodl-tmp/WMCapstone/train_filelist.txt'
+    val_list_path = '/root/autodl-tmp/WMCapstone/val_filelist.txt'
+    test_list_path = '/root/autodl-tmp/WMCapstone/test_filelist.txt'
 
     if '1' in a.stage:
         print("Processing training set...")
