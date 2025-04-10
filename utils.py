@@ -63,7 +63,11 @@ def load_checkpoint(filepath, device):
 
 # save a checkpoint, override the most outdated on in num_ckpt_keep checkpoints.
 def save_checkpoint(filepath, obj, num_ckpt_keep=5):
-    name = re.match(r'(do|g)_\d+', pathlib.Path(filepath).name).group(1)
+    filename = pathlib.Path(filepath).name
+    match = re.match(r'(.+)_\d+', filename)
+    if not match:
+        raise ValueError(f"Unexpected checkpoint filename format: {filename}")
+    name = match.group(1)
     ckpts = sorted(pathlib.Path(filepath).parent.glob(f'{name}_*'))
     if len(ckpts) > num_ckpt_keep:
         [os.remove(c) for c in ckpts[:-num_ckpt_keep]]

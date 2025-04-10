@@ -351,6 +351,7 @@ def train(rank, a, h):
                               format(steps, loss_codec_total, loss_quantization, loss_mel_base.item(), loss_watermark, time.time() - start_b))
                 # checkpointing
                 if steps % a.checkpoint_interval == 0 and steps != 0:
+                    print("check pointing")
                     checkpoint_path = "{}/generator_{:08d}".format(a.checkpoint_path, steps)
                     save_checkpoint(checkpoint_path,
                                     {'generator': (generator.module if h.num_gpus > 1 else generator).state_dict(),
@@ -380,6 +381,7 @@ def train(rank, a, h):
 
             # ------------------------------- validation --------------------------------*
             if rank == 0 and steps % a.validation_interval == 0 and steps != 0:
+                print("validating")
                 encoder.eval()
                 quantizer.eval()
                 generator.eval()
@@ -451,8 +453,8 @@ def train(rank, a, h):
                             summary_writer.add_figure('generated/mel_audio_generated_{}'.format(index), plot_spectrogram(mel_audio_generated.squeeze(0).cpu().numpy()), steps)
 
                             # convert watermark index to character in ASCII
-                            watermark_words = "".join(chr(idx) for idx in watermark.view(-1).to_list())
-                            watermark_words_recovered = "".join(chr(idx) for idx in watermark_recovered.view(-1).to_list())
+                            watermark_words = "".join(chr(idx) for idx in watermark.view(-1).tolist())
+                            watermark_words_recovered = "".join(chr(idx) for idx in watermark_recovered.view(-1).tolist())
                             summary_writer.add_text("original_watermark", watermark_words, steps)
                             summary_writer.add_text("recovered_watermark", watermark_words_recovered, steps)
 
