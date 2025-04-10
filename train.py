@@ -155,11 +155,29 @@ def train(rank, a, h):
                                        drop_last=True)
         summary_writer = SummaryWriter(os.path.join(a.checkpoint_path, 'logs'))
 
-    #------------------------- Configuring optimizer and scheduler -------------------*
-    optim_codec = torch.optim.Adam(
-        itertools.chain(generator.parameters(), encoder.parameters(), quantizer.parameters(),
-                        watermark_encoder.parameters(), watermark_decoder.parameters()),
-                        h.learning_rate, betas=(h.adam_b1, h.adam_b2))
+    #------------------------- Configuring optimizer and scheduler and freeze weight training -------------------*
+    # Freeze weight for faster training
+    # encoder
+    for name, param in encoder.named_parameters():
+        if "AIU" not in name:
+            param.requires_grad = False
+    # decoder
+    for param in generator.parameters():
+        param.requires_grad = False
+    # quantizer
+    for param in quantizer.parameters():
+        param.requires_grad = False
+
+    trainable_params = filter(lambda p: p.requires_grad,
+                              itertools.chain(
+                                  generator.parameters(),
+                                  encoder.parameters(),
+                                  quantizer.parameters(),
+                                  watermark_encoder.parameters(),
+                                  watermark_decoder.parameters()
+                              )
+                              )
+    optim_codec = torch.optim.Adam(trainable_params, h.learning_rate, betas=(h.adam_b1, h.adam_b2))
     optim_discriminators = torch.optim.Adam(
         itertools.chain(ms_discriminator.parameters(), mp_discriminator.parameters(), msstft_discriminator.parameters()),
                         h.learning_rate, betas=(h.adam_b1, h.adam_b2))
@@ -407,8 +425,8 @@ def train(rank, a, h):
                         mel_audio_attacked = mel_spectrogram(audio_attacked.squeeze(1), h.n_fft, h.num_mels,
                                                              h.sampling_rate,
                                                              h.hop_size, h.win_size, h.fmin, h.fmax_for_loss)
-                        watermark_recovered = watermark_decoder(mel_audio_attacked)
-                        loss_validation_watermark += watermark_loss(watermark_recovered, watermark)
+                        rec_watermark_logit, watermark_recovered = watermark_decoder(mel_audio_attacked)
+                        loss_validation_watermark += watermark_loss(rec_watermark_logit, watermark)
 
                         ## ---------------- plot the original audio and the generated audio and wm
                         global plot_ground_truth_only_once, plot_audio_number
