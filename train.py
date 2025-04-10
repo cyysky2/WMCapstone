@@ -167,20 +167,24 @@ def train(rank, a, h):
     # quantizer
     for param in quantizer.parameters():
         param.requires_grad = False
-
-    trainable_params = filter(lambda p: p.requires_grad,
+    trainable_params_codec = filter(lambda p: p.requires_grad,
                               itertools.chain(
                                   generator.parameters(),
                                   encoder.parameters(),
                                   quantizer.parameters(),
                                   watermark_encoder.parameters(),
-                                  watermark_decoder.parameters()
-                              )
-                              )
-    optim_codec = torch.optim.Adam(trainable_params, h.learning_rate, betas=(h.adam_b1, h.adam_b2))
-    optim_discriminators = torch.optim.Adam(
-        itertools.chain(ms_discriminator.parameters(), mp_discriminator.parameters(), msstft_discriminator.parameters()),
-                        h.learning_rate, betas=(h.adam_b1, h.adam_b2))
+                                  watermark_decoder.parameters()))
+    optim_codec = torch.optim.Adam(trainable_params_codec, h.learning_rate, betas=(h.adam_b1, h.adam_b2))
+
+    for param in itertools.chain(ms_discriminator.parameters(), mp_discriminator.parameters(), msstft_discriminator.parameters()):
+        param.requires_grad = False
+    trainable_params_discriminators = filter(lambda p: p.requires_grad,
+                                             itertools.chain(ms_discriminator.parameters(),
+                                                             mp_discriminator.parameters(),
+                                                             msstft_discriminator.parameters()))
+    optim_discriminators = torch.optim.Adam(trainable_params_discriminators, h.learning_rate, betas=(h.adam_b1, h.adam_b2))
+
+
     # load optimizer state if resume training
     if state_dict_discrim_and_optim is not None:
         optim_codec.load_state_dict(state_dict_discrim_and_optim['optim_codec'])
@@ -438,8 +442,7 @@ def train(rank, a, h):
 
                             # generated
                             summary_writer.add_audio('generated/audio_generated_{}'.format(index), audio_generated[0], steps, h.sampling_rate)
-                            # TODO: mel_audio_generated.squeeze(0).cpu().numpy()
-                            summary_writer.add_figure('generated/y_hat_spec_{}'.format(index), plot_spectrogram(mel_audio_generated.squeeze(0)), steps)
+                            summary_writer.add_figure('generated/mel_audio_generated_{}'.format(index), plot_spectrogram(mel_audio_generated.squeeze(0).cpu().numpy()), steps)
 
                             # convert watermark index to character in ASCII
                             watermark_words = "".join(chr(idx) for idx in watermark.view(-1).to_list())
