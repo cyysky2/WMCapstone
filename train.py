@@ -371,7 +371,7 @@ def train(rank, a, h):
                         watermark = random_watermark(mel_audio.shape[0], h)
 
                         audio = audio.to(device)
-                        mel_audio = mel_audio_loss.to(device)
+                        mel_audio_loss = mel_audio_loss.to(device)
                         watermark = watermark.to(device)
 
                         ## -------- Codec forward pass and loss compute
