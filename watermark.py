@@ -288,15 +288,15 @@ def attack(y_g_hat, order_list=None):
 
     # The median filter smooths the audio by replacing each sample with the median of a small window of neighboring samples.
     if operation == "MF-3":
-        window_size = 3
-        filtered_signal = torch.zeros_like(y_g_hat)
-        for i in range(y_g_hat.size(2)):
-            start = max(0, i - window_size // 2)
-            end = min(y_g_hat.size(2), i + window_size // 2 + 1)
-            window = y_g_hat[:, :, start:end]
-            filtered_signal[:, :, start:end] = torch.median(window)
+        def median_filter(y, kernel_size=3):
+            pad = kernel_size // 2
+            y_padded = func.pad(y, (pad, pad), mode="reflect")
+            # y: (batch, channels, time)
+            y_unfolded = y_padded.unfold(dimension=2, size=kernel_size, step=1)  # shape: (B, C, T, K)
+            med_filtered, _ = torch.median(y_unfolded, dim=-1)  # take median across window
+            return med_filtered
 
-        y_g_hat_att = filtered_signal
+        y_g_hat_att = median_filter(y_g_hat, kernel_size=3)
         return y_g_hat_att, operation
 
 # Keep audio length after time stretching attack
