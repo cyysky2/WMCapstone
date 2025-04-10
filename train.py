@@ -471,6 +471,7 @@ def main():
     parser.add_argument('--validation_interval', default=500, type=int) # 20 1000 500
     parser.add_argument('--num_ckpt_keep', default=5, type=int) # 5
     parser.add_argument('--fine_tuning', default=False, type=bool)
+    parser.add_argument('--input_mels_dir', default='')
     parser.add_argument('--pretrain_checkpoint_path', default='')
 
     a = parser.parse_args()

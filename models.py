@@ -93,7 +93,7 @@ class Encoder(nn.Module):
             for j , (k, d) in enumerate(zip(
                     list(reversed(cfg.resblock_kernel_sizes)),
                     list(reversed(cfg.resblock_dilation_sizes)))):
-                self.resblocks.append(res_block(cfg, res_in_ch, k, d)) # in_ch = out_ch
+                self.res_blocks.append(res_block(cfg, res_in_ch, k, d)) # in_ch = out_ch
                 self.normalize.append(nn.GroupNorm(res_in_ch // 16, res_in_ch, eps=1e-6, affine=True))
 
         self.conv_post = Conv1d(512, 512, 3, 1, padding=1)
@@ -186,7 +186,7 @@ class Quantizer(torch.nn.Module):
         assert self.codebook_weight % self.n_code_groups == 0
 
         self.quantizer_module_residual_list = nn.ModuleList()
-        for i in range(self.residul_layer):
+        for i in range(self.residual_layer):
             self.quantizer_module_residual_list.append(nn.ModuleList([
                 QuantizerModule(self.n_codes, self.codebook_weight // self.n_code_groups) for _ in
                 range(self.n_code_groups)
@@ -199,14 +199,14 @@ class Quantizer(torch.nn.Module):
         x = xin.reshape(-1, self.codebook_weight)
         # (1600, 512/1)
         x = torch.split(x, self.codebook_weight // self.n_code_groups, dim=-1)
-        min_indexes = []
+        min_indexes_list = []
         z_q = []
 
-        for _x, m in zip(x, self.quantizer_module_residul_list[idx]):
+        for _x, m in zip(x, self.quantizer_module_residual_list[idx]):
             # training: [1600, 512/1], [1600]; Validation: (32*T, 512/1), (32*T)
             _z_q, min_indexes = m(_x)
             z_q.append(_z_q)
-            min_indexes.append(min_indexes)  # B * T,
+            min_indexes_list.append(min_indexes)  # B * T,
         # n_group * (32*T, 512/n_group) -> (32*T, 512) -> (32, T, 512)
         z_q = torch.cat(z_q, -1).reshape(xin.shape)
         # loss = 0.25 * torch.mean((z_q.detach() - xin) ** 2) + torch.mean((z_q - xin.detach()) ** 2)
@@ -215,7 +215,7 @@ class Quantizer(torch.nn.Module):
         z_q = xin + (z_q - xin).detach()
         z_q = z_q.transpose(1, 2)
         # (32, T, 512), 1, group*32*T = 32*T
-        return z_q, loss, min_indexes
+        return z_q, loss, min_indexes_list
 
     # 1st xin: [32, 512, 50]
     def forward(self, xin):
@@ -224,7 +224,7 @@ class Quantizer(torch.nn.Module):
         residual = xin
         all_losses = []
         all_indices = []
-        for i in range(self.residul_layer):
+        for i in range(self.residual_layer):
             quantized, loss, indices = self.for_one_step(residual, i)  #
             residual = residual - quantized
             quantized_out = quantized_out + quantized

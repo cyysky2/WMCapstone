@@ -175,7 +175,7 @@ def attack(y_g_hat, order_list=None):
         resampler = torchaudio.transforms.Resample(
             orig_freq=24000,
             new_freq=int(24000 * speed_factor)
-        )
+        ).to(y_g_hat.device)
 
         y_g_hat_att = resampler(y_g_hat)
 
@@ -187,7 +187,7 @@ def attack(y_g_hat, order_list=None):
         resampler = torchaudio.transforms.Resample(
             orig_freq=24000,
             new_freq=int(24000 * speed_factor)
-        )
+        ).to(y_g_hat.device)
 
         y_g_hat_att = resampler(y_g_hat)
 
