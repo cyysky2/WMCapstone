@@ -100,8 +100,8 @@ def inference(a):
                 mel_audio_attacked = mel_spectrogram(audio_attacked.squeeze(1), h.n_fft, h.num_mels, h.sampling_rate,
                                                      h.hop_size, h.win_size, h.fmin, h.fmax_for_loss)
                 # (1, 25)
-                watermark_recovered = watermark_decoder(mel_audio_attacked)
-                loss_watermark = watermark_loss(watermark_recovered, watermark)
+                rec_watermark_logit, watermark_recovered = watermark_decoder(mel_audio_attacked)
+                loss_watermark = watermark_loss(rec_watermark_logit, watermark)
 
                 # log result
                 result_log[attack_operation][0] += 1

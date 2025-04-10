@@ -53,13 +53,13 @@ def mel_spectrogram(audio,
         print('max value is ', torch.max(audio))
 
     global mel_basis, hann_window
-    # NOTE: if condition Modified
-    if str(freq_max) + '_' + str(audio.device)  not in mel_basis:
-        # Generates the Mel filter bank matrix.
-        mel = librosa_mel_fn(sr = sampling_rate, n_fft = n_fft, n_mels = num_mels, fmin = freq_min, fmax = freq_max)
-        mel_basis[str(freq_max) + '_' + str(audio.device)] = torch.from_numpy(mel).float().to(audio.device)
-        # A 1-D tensor of size (window_length,), containing the window (weight)
-        hann_window[str(audio.device)] = torch.hann_window(win_size).to(audio.device)
+    # NOTE: if condition removed: The filer bank and hann windown changes and cannot be reused.
+    # if str(freq_max) + '_' + str(audio.device)  not in mel_basis:
+    # Generates the Mel filter bank matrix.
+    mel = librosa_mel_fn(sr = sampling_rate, n_fft = n_fft, n_mels = num_mels, fmin = freq_min, fmax = freq_max)
+    mel_basis[str(freq_max) + '_' + str(audio.device)] = torch.from_numpy(mel).float().to(audio.device)    
+    # A 1-D tensor of size (window_length,), containing the window (weight)
+    hann_window[str(audio.device)] = torch.hann_window(win_size).to(audio.device)
 
     # Padding for FFT to capture all info.
     audio = torch.nn.functional.pad(

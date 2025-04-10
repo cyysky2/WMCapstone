@@ -235,8 +235,8 @@ def train(rank, a, h):
             # (32, 25)
             mel_audio_attacked = mel_spectrogram(audio_attacked.squeeze(1), h.n_fft, h.num_mels, h.sampling_rate,
                                                  h.hop_size, h.win_size, h.fmin, h.fmax_for_loss)
-            watermark_recovered = watermark_decoder(mel_audio_attacked)
-            loss_watermark = watermark_loss(watermark_recovered, watermark)
+            rec_watermark_logit, watermark_recovered = watermark_decoder(mel_audio_attacked)
+            loss_watermark = watermark_loss(rec_watermark_logit, watermark)
 
             # ---------------------------- Forward pass for discriminators -----------------------*
             # TODO: in the original code, the generated input is audio_attacked. I think it is a mistake
