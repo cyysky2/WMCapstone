@@ -33,7 +33,8 @@
         "encoder_final_dim": 1024,
         "resnet_feat_dim": 80,
         "resnet_embed_dim": 1024,
-        "decoder_mlp_dims": [512, 128]
+        "decoder_mlp_dims": [512, 128],
+        "dropout_rate": 0.3
     },
 
     "Audio": {"n_code_groups": 2,

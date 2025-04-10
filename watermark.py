@@ -8,7 +8,6 @@ from torch.nn import Linear
 from torch.nn.utils import weight_norm
 from resnet import ResNet293
 
-DIGIT_SIZE = 106
 LRELU_SLOPE = 0.1
 
 # generate a random wm of size (32, 25), dim = 106 (all in-use ascii char), 25@106
@@ -43,6 +42,7 @@ class WatermarkEncoder(torch.nn.Module):
         x = x.view(x.shape[0], 50, 512)  # (batch, 50, 512): (32, 50, 512)
         return x
 
+# Discarded
 class WatermarkDecoder(nn.Module):
     def __init__(self, h):
         super(WatermarkDecoder, self).__init__()
@@ -70,9 +70,72 @@ class WatermarkDecoder(nn.Module):
         x = self.to_wm(x)  # (batch, 25)
         return x
 
+class ImprovedWatermarkDecoder(nn.Module):
+    def __init__(self, h):
+        super(ImprovedWatermarkDecoder, self).__init__()
 
-def watermark_loss(reconstruct_sign, sign):
-    loss = func.cross_entropy(reconstruct_sign, sign)
+        self.capacity = h.Watermark["capacity"]  # 25 digits
+        self.num_classes = h.Watermark["digit_size"]  # 106 possibilities per digit
+        resnet_feat_dim = h.Watermark["resnet_feat_dim"]  # 80
+        resnet_embed_dim = h.Watermark["resnet_embed_dim"]  # 1024
+
+        self.recover = ResNet293(
+            feat_dim=resnet_feat_dim,
+            embed_dim=resnet_embed_dim,
+            pooling_func='MQMHASTP'
+        )
+
+        # This shared MLP processes the ResNet embedding before per-digit classification.
+        mlp_dims = [resnet_embed_dim] + h.Watermark['decoder_mlp_dims']
+        layers = []
+        dropout_rate = h.Watermark.get('dropout_rate', 0.3)
+        for i in range(len(mlp_dims) - 1):
+            layers.append(weight_norm(nn.Linear(mlp_dims[i], mlp_dims[i + 1])))
+            layers.append(nn.LeakyReLU(negative_slope=LRELU_SLOPE))
+            layers.append(nn.Dropout(p=dropout_rate))
+        self.mlp_body = nn.Sequential(*layers)
+
+        # Create one per-digit classifier.
+        # Each classifier is a simple linear layer that outputs a vector of logits over the possible classes.
+        self.classifiers = nn.ModuleList([
+            weight_norm(nn.Linear(mlp_dims[-1], self.num_classes))
+            for _ in range(self.capacity)
+        ])
+
+    # input (32, 80, 50)
+    def forward(self, x):
+        # (batch_size, num_frames, num_mel_filters (80))
+        x = x.transpose(1, 2)  # (batch, 80, 50) -> (batch, 50, 80)
+        x = self.recover(x)[-1]  # (batch, 50, 80) -> (batch, 1024)
+        x = self.mlp_body(x)  # (batch, 1024) -> (batch, 512) -> (batch, 128)
+
+        # For each digit position, get the classifier’s logits.
+        logits_list = []
+        for clf in self.classifiers:
+            digit_logits = clf(x)  # (batch, 128) -> (batch, digit_size): (batch, 128) -> (batch, 106)
+            logits_list.append(digit_logits.unsqueeze(1))  # Expand to (batch, 1, 106)
+        # Concatenate all digit logits to form the final output.
+        logits = torch.cat(logits_list, dim=1)  # (batch, capacity, num_classes)
+
+        rec_watermark = torch.argmax(logits, dim=-1)
+
+        return logits, rec_watermark
+
+def watermark_loss(reconstruct_sign_logit, sign):
+    """
+    Args:
+        reconstruct_sign_logit: Tensor of shape (batch, capacity, num_classes)
+        sign: Tensor of shape (batch, capacity) with integer labels in [0, num_classes-1]
+    Returns:
+        Scalar loss (averaged cross entropy over all digits in the batch)
+    """
+    batch_size, capacity, num_classes = reconstruct_sign_logit.shape
+
+    # Reshape for CrossEntropyLoss: (batch * capacity, num_classes)
+    logits_flat = reconstruct_sign_logit.view(-1, num_classes)
+    sign_flat = sign.view(-1)
+
+    loss = func.cross_entropy(logits_flat, sign_flat)
     return loss
 
 def count_common_digit(watermarkA, watermarkB):

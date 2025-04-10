@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from scipy.io.wavfile import write
 from models import Generator, Encoder, Quantizer
 from utils import load_checkpoint, AttrDict
-from watermark import WatermarkEncoder, WatermarkDecoder, random_watermark, attack, restore_audio, watermark_loss, count_common_digit
+from watermark import WatermarkEncoder, ImprovedWatermarkDecoder, random_watermark, attack, restore_audio, watermark_loss, count_common_digit
 from meldataset import load_wav, mel_spectrogram, MAX_WAV_VALUE
 
 # for each sample compute the average watermark loss under 10 random attacks
@@ -23,7 +23,7 @@ def inference(a):
     encoder = Encoder(h).to(device)
     quantizer = Quantizer(h).to(device)
     watermark_encoder = WatermarkEncoder(h).to(device)
-    watermark_decoder = WatermarkDecoder(h).to(device)
+    watermark_decoder = ImprovedWatermarkDecoder(h).to(device)
 
     state_dict_codec = load_checkpoint(a.checkpoint_file, device)
 

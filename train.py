@@ -8,7 +8,7 @@ import torch.nn.functional as func
 import torch.multiprocessing as mp
 
 from models import Encoder, Quantizer, Generator, feature_loss, generator_loss
-from watermark import random_watermark, WatermarkEncoder, WatermarkDecoder, attack, restore_audio, watermark_loss
+from watermark import random_watermark, WatermarkEncoder, ImprovedWatermarkDecoder, attack, restore_audio, watermark_loss
 from discriminators import MultiScaleDiscriminator, MultiPeriodDiscriminator, MultiScaleSTFTDiscriminator, discriminator_loss
 from meldataset import get_dataset_filelist, MelDataset, mel_spectrogram
 from utils import scan_checkpoint, load_checkpoint, save_checkpoint, AttrDict, build_env, plot_spectrogram
@@ -38,7 +38,7 @@ def train(rank, a, h):
     generator = Generator(h).to(device)
     quantizer = Quantizer(h).to(device)
     watermark_encoder = WatermarkEncoder(h).to(device)
-    watermark_decoder = WatermarkDecoder(h).to(device)
+    watermark_decoder = ImprovedWatermarkDecoder(h).to(device)
     mp_discriminator = MultiPeriodDiscriminator().to(device)
     ms_discriminator = MultiScaleDiscriminator().to(device)
     msstft_discriminator = MultiScaleSTFTDiscriminator(32).to(device)
