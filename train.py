@@ -176,8 +176,10 @@ def train(rank, a, h):
                                   watermark_decoder.parameters()))
     optim_codec = torch.optim.Adam(trainable_params_codec, h.learning_rate, betas=(h.adam_b1, h.adam_b2))
 
+    '''
     for param in itertools.chain(ms_discriminator.parameters(), mp_discriminator.parameters(), msstft_discriminator.parameters()):
         param.requires_grad = False
+    '''
     trainable_params_discriminators = filter(lambda p: p.requires_grad,
                                              itertools.chain(ms_discriminator.parameters(),
                                                              mp_discriminator.parameters(),
@@ -191,7 +193,9 @@ def train(rank, a, h):
         optim_discriminators.load_state_dict(state_dict_discrim_and_optim['optim_discriminators'])
 
     scheduler_codec = torch.optim.lr_scheduler.ExponentialLR(optim_codec, gamma=h.lr_decay, last_epoch=last_epoch)
+    '''
     scheduler_discriminators = torch.optim.lr_scheduler.ExponentialLR(optim_discriminators, gamma=h.lr_decay, last_epoch=last_epoch)
+    '''
 
     #---------------------------- Set models to Train mode -----------------------*
     generator.train()
@@ -275,9 +279,11 @@ def train(rank, a, h):
             loss_discriminators = loss_mpd + loss_msd + loss_msstftd
 
             # backward and gradient update
+            '''
             optim_discriminators.zero_grad()
             loss_discriminators.backward()
             optim_discriminators.step()
+            '''
 
             # -------------------- audio codec loss: mel spectrogram loss -------------------------------*
             # the generated mel spectrogram should be similar to the original one.
@@ -469,7 +475,9 @@ def train(rank, a, h):
             steps += 1
 
         # ------------------ last line of this epoch:  one epoch over. --------------------------
+        '''
         scheduler_discriminators.step()
+        '''
         scheduler_codec.step()
         if rank == 0:
             print('Time taken for epoch {} is {} sec\n'.format(epoch + 1, int(time.time() - start_e)))
