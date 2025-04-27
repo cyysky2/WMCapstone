@@ -27,7 +27,7 @@
 
     "Watermark": {
         "capacity": 25,
-        "digit_size": 106,
+        "digit_size": 26,
         "embed_dim": 32,
         "encoder_mlp_dims": [64, 256, 512],
         "encoder_final_dim": 1024,

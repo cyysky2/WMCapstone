@@ -10,8 +10,8 @@ from meldataset import load_wav, mel_spectrogram, MAX_WAV_VALUE
 # for each sample compute the average watermark loss under 10 random attacks
 num_attack = 20
 
-operations = ["CLP", "RSP-90", "Noise-W35", "SS-01", "AS-90", "AS-150",
-                "EA-0301", "LP5000", "HP100", "MF-3", "TS-90", "TS-110"]
+operations = ["Pass", "RSP-70", "Noise-W55", "SS-01", "AS-50", "AS-250",
+                "EA-0301", "LP1000", "HP500", "MF-6", "TS-90", "TS-110"]
 
 # Performs embedding of 0.5s audio exactly. For longer audio, clip them first.
 # The inference includes: Encoder, RVQ, Decoder, WM encoder, WM decoder.
@@ -83,19 +83,18 @@ def inference(a):
             # for each chunk, undergoes some attack to see average performance
             for j in range(num_attack):
                 # audio_attacked: (32, 1, 12000)
-                audio_attacked, attack_operation = attack(audio_generated, [
-                    ("CLP", 0.35),
-                    ("RSP-90", 0.15),
-                    ("Noise-W35", 0.05),
-                    ("SS-01", 0.05),
-                    ("AS-90", 0.05), ("AS-150", 0.05),
-                    ("EA-0301", 0.05),
-                    ("LP5000", 0.05), ("HP100", 0.05), ("MF-3", 0.05),
-                    ("TS-90", 0.05), ("TS-110", 0.05)
-                ])
+                audio_attacked, attack_operation = attack(audio_generated, h.sampling_rate, [
+                            ("Pass", 0.35),
+                            ("RSP-70", 0.15),
+                            ("Noise-W55", 0.05),
+                            ("SS-01", 0.05),
+                            ("AS-50", 0.05), ("AS-250", 0.05),
+                            ("EA-0301", 0.05),
+                            ("LP1000", 0.05), ("HP500", 0.05), ("MF-6", 0.05),
+                            ("TS-90", 0.05), ("TS-110", 0.05)
+                        ])
                 # Keep audio length after time stretching attack for training. Clip or pad, this is no cheating.
-                if attack_operation.startswith("TS"):
-                    audio_attacked = restore_audio(audio_attacked, audio_generated.size(-1))
+                audio_attacked = restore_audio(audio_attacked, audio_generated.size(-1))
                 # (1, 80, 50)
                 mel_audio_attacked = mel_spectrogram(audio_attacked.squeeze(1), h.n_fft, h.num_mels, h.sampling_rate,
                                                      h.hop_size, h.win_size, h.fmin, h.fmax_for_loss)

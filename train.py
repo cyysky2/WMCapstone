@@ -104,8 +104,8 @@ def train(rank, a, h):
             generator.load_state_dict(state_dict_codec['generator'])
             encoder.load_state_dict(state_dict_codec['encoder'])
             quantizer.load_state_dict(state_dict_codec['quantizer'])
-            watermark_encoder.load_state_dict(state_dict_codec['watermark_encoder'])
-            watermark_decoder.load_state_dict(state_dict_codec['watermark_decoder'])
+            # watermark_encoder.load_state_dict(state_dict_codec['watermark_encoder'])
+            # watermark_decoder.load_state_dict(state_dict_codec['watermark_decoder'])
 
             # discriminator and optimizer loading
             mp_discriminator.load_state_dict(state_dict_discrim_and_optim['mpd'])
@@ -153,20 +153,11 @@ def train(rank, a, h):
                                        batch_size=1,
                                        pin_memory=True,
                                        drop_last=True)
-        summary_writer = SummaryWriter(os.path.join(a.checkpoint_path, 'logs'))
+        summary_writer = SummaryWriter(os.path.join(a.log_path, 'logs'))
 
     #------------------------- Configuring optimizer and scheduler and freeze weight training -------------------*
     # Freeze weight for faster training
-    # encoder
-    for name, param in encoder.named_parameters():
-        if "AIU" not in name:
-            param.requires_grad = False
-    # decoder
-    for param in generator.parameters():
-        param.requires_grad = False
-    # quantizer
-    for param in quantizer.parameters():
-        param.requires_grad = False
+    
     trainable_params_codec = filter(lambda p: p.requires_grad,
                               itertools.chain(
                                   generator.parameters(),
@@ -176,27 +167,60 @@ def train(rank, a, h):
                                   watermark_decoder.parameters()))
     optim_codec = torch.optim.Adam(trainable_params_codec, h.learning_rate, betas=(h.adam_b1, h.adam_b2))
 
-    '''
-    for param in itertools.chain(ms_discriminator.parameters(), mp_discriminator.parameters(), msstft_discriminator.parameters()):
-        param.requires_grad = False
-    '''
+    
     trainable_params_discriminators = filter(lambda p: p.requires_grad,
                                              itertools.chain(ms_discriminator.parameters(),
                                                              mp_discriminator.parameters(),
                                                              msstft_discriminator.parameters()))
     optim_discriminators = torch.optim.Adam(trainable_params_discriminators, h.learning_rate, betas=(h.adam_b1, h.adam_b2))
 
-
     # load optimizer state if resume training
     if state_dict_discrim_and_optim is not None:
-        optim_codec.load_state_dict(state_dict_discrim_and_optim['optim_codec'])
+        # optim_codec.load_state_dict(state_dict_discrim_and_optim['optim_codec'])
         optim_discriminators.load_state_dict(state_dict_discrim_and_optim['optim_discriminators'])
-
-    scheduler_codec = torch.optim.lr_scheduler.ExponentialLR(optim_codec, gamma=h.lr_decay, last_epoch=last_epoch)
+        
+    # for stage 2+ training
     '''
+    for name, param in encoder.named_parameters():
+        if "AIU" not in name:
+            param.requires_grad = False
+    '''
+    '''
+    for name, param in encoder.named_parameters():
+        if "AIU" in name:
+            param.requires_grad = False
+    '''
+    '''
+    # for stage 2+ training
+    # encoder
+    for param in encoder.parameters():
+        param.requries_grad = False
+    '''
+    '''
+    # decoder
+    for param in generator.parameters():
+        param.requires_grad = False
+    # quantizer
+    for param in quantizer.parameters():
+        param.requires_grad = False
+
+    # discriminators
+    for param in trainable_params_discriminators:
+        param.requires_grad = False
+    '''
+    '''
+    # Manual LR adjust during training
+    for param_group in optim_codec.param_groups:
+        param_group['lr'] = param_group['lr'] / 3  # or set an exact value
+    '''   
+    '''
+    scheduler_codec = torch.optim.lr_scheduler.ExponentialLR(optim_codec, gamma=h.lr_decay, last_epoch=last_epoch)
     scheduler_discriminators = torch.optim.lr_scheduler.ExponentialLR(optim_discriminators, gamma=h.lr_decay, last_epoch=last_epoch)
     '''
-
+    
+    scheduler_codec = torch.optim.lr_scheduler.ExponentialLR(optim_codec, gamma=h.lr_decay, last_epoch=-1)
+    scheduler_discriminators = torch.optim.lr_scheduler.ExponentialLR(optim_discriminators, gamma=h.lr_decay, last_epoch=-1)
+    
     #---------------------------- Set models to Train mode -----------------------*
     generator.train()
     encoder.train()
@@ -243,20 +267,25 @@ def train(rank, a, h):
             # audio_generated: (32, 1, 12000)
             audio_generated = generator(quantized_feat)
             # audio_attacked: (32, 1, 12000)
-            audio_attacked, attack_operation = attack(audio_generated,[
-                ("CLP", 0.35),
-                ("RSP-90", 0.15),
-                ("Noise-W35", 0.05),
+            
+            audio_attacked, attack_operation = attack(audio_generated, h.sampling_rate, [
+                ("Pass", 0.35),
+                ("RSP-70", 0.15),
+                ("Noise-W55", 0.05),
                 ("SS-01", 0.05),
-                ("AS-90", 0.05), ("AS-150", 0.05),
+                ("AS-50", 0.05), ("AS-250", 0.05),
                 ("EA-0301", 0.05),
-                ("LP5000", 0.05), ("HP100", 0.05), ("MF-3", 0.05),
+                ("LP1000", 0.05), ("HP500", 0.05), ("MF-6", 0.05),
                 ("TS-90", 0.05), ("TS-110", 0.05)
             ])
             # Keep audio length after time stretching attack for training
-            if attack_operation.startswith("TS"):
-                audio_attacked = restore_audio(audio_attacked, audio_generated.size(-1))
+            audio_attacked = restore_audio(audio_attacked, audio_generated.size(-1))
 
+            '''
+            # for stage 1 training, no attack
+            audio_attacked = audio_generated
+            '''
+            
             # ------------------ watermark codec forward & loss compute ------------------------*
             # (32, 25)
             mel_audio_attacked = mel_spectrogram(audio_attacked.squeeze(1), h.n_fft, h.num_mels, h.sampling_rate,
@@ -279,11 +308,10 @@ def train(rank, a, h):
             loss_discriminators = loss_mpd + loss_msd + loss_msstftd
 
             # backward and gradient update
-            '''
+            
             optim_discriminators.zero_grad()
             loss_discriminators.backward()
             optim_discriminators.step()
-            '''
 
             # -------------------- audio codec loss: mel spectrogram loss -------------------------------*
             # the generated mel spectrogram should be similar to the original one.
@@ -337,6 +365,7 @@ def train(rank, a, h):
 
             # ----------------- Codec total loss and gradient update ------------------------------*
             loss_codec_total = loss_quantization * 10 + loss_mel_total + loss_fmap_total + loss_label_total + loss_watermark * 5
+            # loss_codec_total = loss_quantization * 0 + loss_mel_total * 0 + loss_fmap_total * 0 + loss_label_total * 0 + loss_watermark * 5
 
             optim_codec.zero_grad()
             loss_codec_total.backward()
@@ -415,19 +444,18 @@ def train(rank, a, h):
                         # audio_generated: (1, 1, 12000)
                         audio_generated = generator(quantized_feat)
                         # audio_attacked: (1, 1, 12000)
-                        audio_attacked, attack_operation = attack(audio_generated, [
-                            ("CLP", 0.35),
-                            ("RSP-90", 0.15),
-                            ("Noise-W35", 0.05),
+                        audio_attacked, attack_operation = attack(audio_generated, h.sampling_rate, [
+                            ("Pass", 0.35),
+                            ("RSP-70", 0.15),
+                            ("Noise-W55", 0.05),
                             ("SS-01", 0.05),
-                            ("AS-90", 0.05), ("AS-150", 0.05),
+                            ("AS-50", 0.05), ("AS-250", 0.05),
                             ("EA-0301", 0.05),
-                            ("LP5000", 0.05), ("HP100", 0.05), ("MF-3", 0.05),
+                            ("LP1000", 0.05), ("HP500", 0.05), ("MF-6", 0.05),
                             ("TS-90", 0.05), ("TS-110", 0.05)
                         ])
                         # Keep audio length after time stretching attack for training
-                        if attack_operation.startswith("TS"):
-                            audio_attacked = restore_audio(audio_attacked, audio_generated.size(-1))
+                        audio_attacked = restore_audio(audio_attacked, audio_generated.size(-1))
 
                         # -------- audio codec loss computation
                         mel_audio_generated = mel_spectrogram(audio_generated.squeeze(1), h.n_fft, h.num_mels, h.sampling_rate, h.hop_size, h.win_size, h.fmin, h.fmax_for_loss)
@@ -453,8 +481,8 @@ def train(rank, a, h):
                             summary_writer.add_figure('generated/mel_audio_generated_{}'.format(index), plot_spectrogram(mel_audio_generated.squeeze(0).cpu().numpy()), steps)
 
                             # convert watermark index to character in ASCII
-                            watermark_words = "".join(chr(idx) for idx in watermark.view(-1).tolist())
-                            watermark_words_recovered = "".join(chr(idx) for idx in watermark_recovered.view(-1).tolist())
+                            watermark_words = "".join(chr(idx+65) for idx in watermark.view(-1).tolist())
+                            watermark_words_recovered = "".join(chr(idx+65) for idx in watermark_recovered.view(-1).tolist())
                             summary_writer.add_text("original_watermark", watermark_words, steps)
                             summary_writer.add_text("recovered_watermark", watermark_words_recovered, steps)
 
@@ -477,9 +505,9 @@ def train(rank, a, h):
             steps += 1
 
         # ------------------ last line of this epoch:  one epoch over. --------------------------
-        '''
+        
         scheduler_discriminators.step()
-        '''
+        
         scheduler_codec.step()
         if rank == 0:
             print('Time taken for epoch {} is {} sec\n'.format(epoch + 1, int(time.time() - start_e)))
@@ -497,9 +525,10 @@ def main():
     parser.add_argument('--config', default='./config.json')
     parser.add_argument('--training_epochs', default=2000, type=int)
     parser.add_argument('--stdout_interval', default=5, type=int) # 5
-    parser.add_argument('--checkpoint_interval', default=5000, type=int) # 20 5000
+    parser.add_argument('--checkpoint_interval', default=2000, type=int) # 20 5000
     parser.add_argument('--summary_interval', default=100, type=int) # 100
-    parser.add_argument('--validation_interval', default=500, type=int) # 20 1000 500
+    parser.add_argument('--log_path', default='')
+    parser.add_argument('--validation_interval', default=2000, type=int) # 20 1000 500
     parser.add_argument('--num_ckpt_keep', default=5, type=int) # 5
     parser.add_argument('--fine_tuning', default=False, type=bool)
     parser.add_argument('--input_mels_dir', default='')

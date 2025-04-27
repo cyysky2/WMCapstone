@@ -145,40 +145,40 @@ def count_common_digit(watermarkA, watermarkB):
             cnt += 1
     return cnt
 
-def attack(y_g_hat, order_list=None):
+def attack(y_g_hat, sr, order_list=None):
     # attack is used for whole batch
     # order is tuple，[(CLP, 0.4), (RSP-16, 0.3), (Noise-W20, 0.3)]
     """
-    Close loop: no effect: CLP √
-    Re sampling: Uniformly resampled to 90%: RSP-90 √
+    Close loop: no effect: pass √
+    Re sampling: Uniformly resampled to 70%: RSP-70 √
     Time stretching: stretched to 0.9 (TS-90) or 1.1 (TS-110) or original
     Lossy compression: MP3 64 kbps (MP3-64) × not differentiable
-    Random noise: Noise type is uniformly sampled from White Noise 35dB (Noise-W35) √
-    Gain: Gain multiplies a random amplitude to reduce or increase the volume, 0.9 amplitude scaling (APS-90) √ 1.5 amplitude scaling (APS-150) √
-    Pass filter: HPF100 √, LPF5000 √
+    Random noise: Noise type is uniformly sampled from White Noise yielding 55 SNR (Noise-W55) √
+    Gain: Gain multiplies a random amplitude to reduce or increase the volume, 0.5 amplitude scaling (APS-50) √ 2.5 amplitude scaling (APS-250) √
+    Pass filter: HPF500 √, LPF1000 √
     Masking: randomly mask out samples: SS-01 √
     Echo augmentation: EA-0301 √
-    Smooth-out: median filter: MF-3 √
+    Smooth-out: median filter: MF-6 √
     """
     # Select an operation based on its probability
     operations, probabilities = zip(*order_list)
     operation = random.choices(operations, weights=probabilities, k=1)[0]
 
     # No effect
-    if operation == "CLP":
+    if operation == "Pass":
         y_g_hat_att = y_g_hat
         return y_g_hat_att, operation
 
     # resample, but no speed up/down
-    if operation == "RSP-90":
-        resample1 = torchaudio.transforms.Resample(24000, 21600).to(y_g_hat.device)
-        resample2 = torchaudio.transforms.Resample(21600, 24000).to(y_g_hat.device)
+    if operation == "RSP-70":
+        resample1 = torchaudio.transforms.Resample(sr, sr*0.7).to(dtype=y_g_hat.dtype, device=y_g_hat.device)
+        resample2 = torchaudio.transforms.Resample(sr*0.7, sr).to(dtype=y_g_hat.dtype, device=y_g_hat.device)
         y_g_hat_att = resample1(y_g_hat)
         y_g_hat_att = resample2(y_g_hat_att)
         return y_g_hat_att, operation
 
     # white noise
-    if operation == "Noise-W35":
+    if operation == "Noise-W55":
         def generate_white_noise(X, N, snr):
             noise = torch.randn(N)
             noise = noise.to(X.device)
@@ -189,7 +189,7 @@ def attack(y_g_hat, order_list=None):
             X = X + noise
             return X, noise
 
-        y_g_hat_att, noise = generate_white_noise(y_g_hat, y_g_hat.shape[2], 35)
+        y_g_hat_att, noise = generate_white_noise(y_g_hat, y_g_hat.shape[2], 55)
         return y_g_hat_att, operation
 
     # random masking
@@ -202,31 +202,31 @@ def attack(y_g_hat, order_list=None):
             mask = torch.tensor(tensor_data).float()
             return mask
 
-        mask = generate_random_tensor(y_g_hat.shape[2], 0.001)
+        mask = generate_random_tensor(y_g_hat.shape[2], 0.1)
         mask = mask.to(y_g_hat.device)
         y_g_hat_att = y_g_hat * mask
 
         return y_g_hat_att, operation
 
     # Gain
-    if operation == "AS-90":
+    if operation == "AS-50":
         def generate_rate_tensor(N, rate):
             tensor = torch.full((N,), rate)
             return tensor
 
-        rate_para = generate_rate_tensor(y_g_hat.shape[2], 0.9)
+        rate_para = generate_rate_tensor(y_g_hat.shape[2], 0.5)
         rate_para = rate_para.to(y_g_hat.device)
         y_g_hat_att = y_g_hat * rate_para
 
         return y_g_hat_att, operation
 
     # Gain
-    if operation == "AS-150":
+    if operation == "AS-250":
         def generate_rate_tensor(N, rate):
             tensor = torch.full((N,), rate)
             return tensor
 
-        rate_para = generate_rate_tensor(y_g_hat.shape[2], 1.5)
+        rate_para = generate_rate_tensor(y_g_hat.shape[2], 2.5)
         rate_para = rate_para.to(y_g_hat.device)
         y_g_hat_att = y_g_hat * rate_para
 
@@ -236,9 +236,9 @@ def attack(y_g_hat, order_list=None):
     if operation == "TS-90":
         speed_factor = 0.9
         resampler = torchaudio.transforms.Resample(
-            orig_freq=24000,
-            new_freq=int(24000 * speed_factor)
-        ).to(y_g_hat.device)
+            orig_freq=sr,
+            new_freq=int(sr * speed_factor)
+        ).to(dtype=y_g_hat.dtype, device=y_g_hat.device)
 
         y_g_hat_att = resampler(y_g_hat)
 
@@ -248,9 +248,9 @@ def attack(y_g_hat, order_list=None):
     if operation == "TS-110":
         speed_factor = 110
         resampler = torchaudio.transforms.Resample(
-            orig_freq=24000,
-            new_freq=int(24000 * speed_factor)
-        ).to(y_g_hat.device)
+            orig_freq=sr,
+            new_freq=int(sr * speed_factor)
+        ).to(dtype=y_g_hat.dtype, device=y_g_hat.device)
 
         y_g_hat_att = resampler(y_g_hat)
 
@@ -266,7 +266,7 @@ def attack(y_g_hat, order_list=None):
         rate_para = generate_rate_tensor(y_g_hat.shape[2], 0.3)
         rate_para = rate_para.to(y_g_hat.device)
         y_g_hat_echo = y_g_hat * rate_para
-        shift_amount = int(y_g_hat.size(2) * 0.15)
+        shift_amount = int(y_g_hat.size(2) * 0.1)
         y_g_hat_truncated = y_g_hat.clone()[:, :, :shift_amount]
         y_g_hat_truncated[:, :, :shift_amount] = 0
         padded_tensor = torch.cat((y_g_hat_truncated, y_g_hat_echo), dim=2)
@@ -275,20 +275,20 @@ def attack(y_g_hat, order_list=None):
         return y_g_hat_att, operation
 
     # lowpass filter
-    if operation == "LP5000":
-        y_g_hat_att = torchaudio.functional.lowpass_biquad(y_g_hat, 24000, cutoff_freq=5000, Q=0.707)
+    if operation == "LP1000":
+        y_g_hat_att = torchaudio.functional.lowpass_biquad(y_g_hat, sr, cutoff_freq=1000, Q=0.707)
 
         return y_g_hat_att, operation
 
     # highpass filter
-    if operation == "HP100":
+    if operation == "HP500":
         # Apply a high-pass filter with a cutoff frequency of 100 Hz
-        y_g_hat_att = torchaudio.functional.highpass_biquad(y_g_hat, 24000, cutoff_freq=100, Q=0.707)
+        y_g_hat_att = torchaudio.functional.highpass_biquad(y_g_hat, sr, cutoff_freq=500, Q=0.707)
         return y_g_hat_att, operation
 
     # The median filter smooths the audio by replacing each sample with the median of a small window of neighboring samples.
-    if operation == "MF-3":
-        def median_filter(y, kernel_size=3):
+    if operation == "MF-6":
+        def median_filter(y, kernel_size=6):
             pad = kernel_size // 2
             y_padded = func.pad(y, (pad, pad), mode="reflect")
             # y: (batch, channels, time)
@@ -296,7 +296,7 @@ def attack(y_g_hat, order_list=None):
             med_filtered, _ = torch.median(y_unfolded, dim=-1)  # take median across window
             return med_filtered
 
-        y_g_hat_att = median_filter(y_g_hat, kernel_size=3)
+        y_g_hat_att = median_filter(y_g_hat, kernel_size=6)
         return y_g_hat_att, operation
 
 # Keep audio length after time stretching attack
