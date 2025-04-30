@@ -143,7 +143,7 @@ class Encoder(nn.Module):
         print('Removing weight norm...')
         for l in self.ups:
             remove_weight_norm(l)
-        for l in self.resblocks:
+        for l in self.res_blocks:
             l.remove_weight_norm()
         remove_weight_norm(self.conv_pre)
 

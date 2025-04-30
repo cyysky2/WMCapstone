@@ -1,3 +1,12 @@
+'''
+#  Start training:
+python train.py --input_training_file train_filelist.txt --input_validation_file val_filelist.txt --checkpoint_path ~/autodl-tmp/WMCapstone/ckpt --pretrain_checkpoint_path /root/autodl-tmp/pretrain_ckpt/ --log_path ~/tf-logs
+
+# Resume training
+python train.py --input_training_file train_filelist.txt --input_validation_file val_filelist.txt --checkpoint_path ~/autodl-tmp/WMCapstone/ckpt --log_path ~/tf-logs
+
+'''
+
 import torch
 import os
 import itertools
@@ -259,6 +268,7 @@ def train(rank, a, h):
             # -------------------- Forward pass for codec --------------------*
             # (32, 50, 512)
             watermark_feat = watermark_encoder(watermark)
+            # (32, 1, 12000)
             audio = audio.unsqueeze(1)
             # (B, F, T): (32, 512, 50)
             imprinted_feat = encoder(audio, watermark_feat)
