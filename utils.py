@@ -4,6 +4,7 @@ import torch
 import re
 import pathlib
 import shutil
+import time
 import typing as tp
 import matplotlib.pylab as plt
 
@@ -74,3 +75,6 @@ def save_checkpoint(filepath, obj, num_ckpt_keep=5):
     print("Saving checkpoint to {}".format(filepath))
     torch.save(obj, filepath)
     print("Complete.")
+
+def time_str() -> str:
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())

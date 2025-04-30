@@ -19,7 +19,7 @@ import torch.multiprocessing as mp
 from models import Encoder, Quantizer, Generator, feature_loss, generator_loss
 from watermark import random_watermark, WatermarkEncoder, ImprovedWatermarkDecoder, attack, restore_audio, watermark_loss
 from discriminators import MultiScaleDiscriminator, MultiPeriodDiscriminator, MultiScaleSTFTDiscriminator, discriminator_loss
-from meldataset import get_dataset_filelist, MelDataset, mel_spectrogram
+from dataset import get_dataset_filelist, MelDataset, mel_spectrogram
 from utils import scan_checkpoint, load_checkpoint, save_checkpoint, AttrDict, build_env, plot_spectrogram
 
 from tqdm import tqdm

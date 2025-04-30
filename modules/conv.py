@@ -172,7 +172,7 @@ class NormConvTranspose2d(nn.Module):
         return x
 
 
-class SConv1d(nn.Module):
+class StreamableConv1d(nn.Module):
     """Conv1d with some builtin handling of asymmetric or causal padding
     and normalization.
     """
@@ -184,7 +184,7 @@ class SConv1d(nn.Module):
         super().__init__()
         # warn user on unusual setup between dilation and stride
         if stride > 1 and dilation > 1:
-            warnings.warn('SConv1d has been initialized with stride > 1 and dilation > 1'
+            warnings.warn('StreamableConv1d has been initialized with stride > 1 and dilation > 1'
                           f' (kernel_size={kernel_size} stride={stride}, dilation={dilation}).')
         self.conv = NormConv1d(in_channels, out_channels, kernel_size, stride,
                                dilation=dilation, groups=groups, bias=bias, causal=causal,
@@ -210,7 +210,7 @@ class SConv1d(nn.Module):
         return self.conv(x)
 
 
-class SConvTranspose1d(nn.Module):
+class StreamableConvTranspose1d(nn.Module):
     """ConvTranspose1d with some builtin handling of asymmetric or causal padding
     and normalization.
     """

@@ -5,7 +5,7 @@ from scipy.io.wavfile import write
 from models import Generator, Encoder, Quantizer
 from utils import load_checkpoint, AttrDict
 from watermark import WatermarkEncoder, ImprovedWatermarkDecoder, random_watermark, attack, restore_audio, watermark_loss, count_common_digit
-from meldataset import load_wav, mel_spectrogram, MAX_WAV_VALUE
+from dataset import load_wav, mel_spectrogram, MAX_WAV_VALUE
 
 # for each sample compute the average watermark loss under 10 random attacks
 num_attack = 20

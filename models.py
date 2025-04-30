@@ -1,10 +1,14 @@
 import torch
 import torch.nn.functional as func
 import torch.nn as nn
+import julius
+import logging
+from typing import Optional, Tuple
 from utils import init_weights, get_padding
 from torch.nn import Conv1d, ConvTranspose1d
 from torch.nn.utils import weight_norm, remove_weight_norm
 from attention import AttentionImprint
+from modules import SEANetEncoderKeepDimension
 
 LRELU_SLOPE = 0.1
 
@@ -317,3 +321,93 @@ def generator_loss(disc_outputs):
         loss += l
 
     return loss, gen_losses
+
+logger = logging.getLogger("Audioseal")
+COMPATIBLE_WARNING = """
+AudioSeal detector is designed to work at a sample rate 16khz.
+Implicit sampling rate usage is deprecated and will be removed in future version.
+To remove this warning please add this argument to the function call:
+sample_rate = your_sample_rate
+"""
+class AudioSealDetector(torch.nn.Module):
+    """
+    Detect the watermarking from an audio signal
+    Args:
+        SEANetEncoderKeepDimension (_type_): _description_
+        nbits (int): The number of bits in the secret message. The result will have size
+            of 2 + nbits, where the first two items indicate the possibilities of the
+            audio being watermarked (positive / negative scores), he rest is used to decode
+            the secret message. In 0bit watermarking (no secret message), the detector just
+            returns 2 values.
+    """
+
+    def __init__(self, *args, nbits: int = 0, **kwargs):
+        super().__init__()
+        encoder = SEANetEncoderKeepDimension(*args, **kwargs)
+        last_layer = torch.nn.Conv1d(encoder.output_dim, 2 + nbits, 1)
+        self.detector = torch.nn.Sequential(encoder, last_layer)
+        self.nbits = nbits
+
+    def detect_watermark(
+        self,
+        x: torch.Tensor,
+        sample_rate: Optional[int] = None,
+        message_threshold: float = 0.5,
+    ) -> Tuple[float, torch.Tensor]:
+        """
+        A convenience function that returns a probability of an audio being watermarked,
+        together with its message in n-bits (binary) format. If the audio is not watermarked,
+        the message will be random.
+        Args:
+            x: Audio signal, size: batch x frames
+            sample_rate: The sample rate of the input audio
+            message_threshold: threshold used to convert the watermark output (probability
+                of each bits being 0 or 1) into the binary n-bit message.
+        """
+        if sample_rate is None:
+            logger.warning(COMPATIBLE_WARNING)
+            sample_rate = 16_000
+        result, message = self.forward(x, sample_rate=sample_rate)  # b x 2+nbits
+        detected = (
+            torch.count_nonzero(torch.gt(result[:, 1, :], 0.5)) / result.shape[-1]
+        )
+        detect_prob = detected.cpu().item()  # type: ignore
+        message = torch.gt(message, message_threshold).int()
+        return detect_prob, message
+
+    def decode_message(self, result: torch.Tensor) -> torch.Tensor:
+        """
+        Decode the message from the watermark result (batch x nbits x frames)
+        Args:
+            result: watermark result (batch x nbits x frames)
+        Returns:
+            The message of size batch x nbits, indicating probability of 1 for each bit
+        """
+        assert (result.dim() > 2 and result.shape[1] == self.nbits) or (
+            self.dim() == 2 and result.shape[0] == self.nbits
+        ), f"Expect message of size [,{self.nbits}, frames] (get {result.size()})"
+        decoded_message = result.mean(dim=-1)
+        return torch.sigmoid(decoded_message)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        sample_rate: Optional[int] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Detect the watermarks from the audio signal
+        Args:
+            x: Audio signal, size batch x frames
+            sample_rate: The sample rate of the input audio
+        """
+        if sample_rate is None:
+            logger.warning(COMPATIBLE_WARNING)
+            sample_rate = 16_000
+        assert sample_rate
+        if sample_rate != 16000:
+            x = julius.resample_frac(x, old_sr=sample_rate, new_sr=16000)
+        result = self.detector(x)  # b x 2+nbits
+        # hardcode softmax on 2 first units used for detection
+        result[:, :2, :] = torch.softmax(result[:, :2, :], dim=1)
+        message = self.decode_message(result[:, 2:, :])
+        return result[:, :2, :], message

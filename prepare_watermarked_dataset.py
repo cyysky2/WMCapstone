@@ -35,7 +35,7 @@ from watermark import (
 )
 
 # ---------- helper ------------------------------------------------------------
-MAX_WAV_VALUE = 32768.0           # same constant used in meldataset.py
+MAX_WAV_VALUE = 32768.0           # same constant used in dataset.py
 SEG_DUR_SEC   = 0.5               # model expects 0.5 s @ 24 kHz
 SEG_SAMPLES   = int(24000 * SEG_DUR_SEC)
 

@@ -14,6 +14,20 @@ from .conv import (
     NormConvTranspose1d,
     NormConv2d,
     NormConvTranspose2d,
-    SConv1d,
-    SConvTranspose1d,
+    StreamableConv1d,
+    StreamableConvTranspose1d,
+)
+
+from .seanet import (
+    SEANetEncoderKeepDimension
+)
+
+from .resnet import (
+    ResNet18,
+    ResNet34,
+    ResNet50,
+    ResNet101,
+    ResNet152,
+    ResNet221,
+    ResNet293,
 )

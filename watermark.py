@@ -4,7 +4,6 @@ import torchaudio
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as func
-from torch.nn import Linear
 from torch.nn.utils import weight_norm
 from resnet import ResNet293
 
@@ -246,7 +245,7 @@ def attack(y_g_hat, sr, order_list=None):
 
     # speed down (time stretch)
     if operation == "TS-110":
-        speed_factor = 110
+        speed_factor = 1.1
         resampler = torchaudio.transforms.Resample(
             orig_freq=sr,
             new_freq=int(sr * speed_factor)

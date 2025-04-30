@@ -6,7 +6,10 @@ import random
 import numpy as np
 from scipy.io.wavfile import read
 from librosa.util import normalize
+from pathlib import Path
 from librosa.filters import mel as librosa_mel_fn
+import soundfile as sf
+
 
 MAX_WAV_VALUE = 32768.0
 
@@ -188,3 +191,31 @@ class MelDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.audio_files)
+
+class DetectorDataset(torch.utils.data.Dataset):
+    """
+    Expects each watermarked-and-masked wav to be saved as
+        …/<whatever>_det.wav
+    with a matching label file
+        …/<whatever>_det.npy     (uint8 0/1, same length)
+    """
+    def __init__(self, root: Path, split: str = "train",
+                 val_ratio: float = 0.1, seed: int = 42):
+        wavs = sorted(root.rglob("*_det.wav"))
+        if not wavs:
+            raise RuntimeError(f"No *_det.wav found under {root}")
+        random.Random(seed).shuffle(wavs)
+        cut = int(len(wavs) * (1 - val_ratio))
+        self.files = wavs[:cut] if split == "train" else wavs[cut:]
+
+    def __len__(self):  return len(self.files)
+
+    def __getitem__(self, idx):
+        wav_path = self.files[idx]
+        lbl_path = wav_path.with_suffix(".npy")  # …_det.npy
+        audio, sr = sf.read(wav_path, dtype="float32", always_2d=False)
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1)
+        labels = np.load(lbl_path).astype(np.float32)
+        assert len(audio) == len(labels), wav_path
+        return torch.from_numpy(audio), torch.from_numpy(labels), sr
