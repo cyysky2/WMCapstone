@@ -12,10 +12,17 @@
 # inference_sample.py, PyTorch, soundfile, tqdm.
 '''
 python prepare_watermarked_dataset.py \
+--input_dir  /root/autodl-tmp/LibriSpeech/LibriSpeech_24k_wav/dev-clean \
+  --output_dir /root/autodl-tmp/LibriSpeech/LibriSpeech_24k_wav_wm/dev-clean \
+  --checkpoint /root/autodl-tmp/WMCapstone/ckpt \
+  --device cuda:0          # or "cpu"
+
+
+python prepare_watermarked_dataset.py \
 --input_dir  /root/autodl-tmp/LibriSpeech/LibriSpeech_24k_wav/train-clean-360 \
   --output_dir /root/autodl-tmp/LibriSpeech/LibriSpeech_24k_wav_wm/train-clean-360 \
   --checkpoint /root/autodl-tmp/WMCapstone/ckpt \
-  --device cuda:0          # or "cpu"
+  --device cuda:0
 '''
 # ================================================================
 

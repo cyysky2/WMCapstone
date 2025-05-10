@@ -366,7 +366,7 @@ class AudioSealDetector(torch.nn.Module):
         """
         if sample_rate is None:
             logger.warning(COMPATIBLE_WARNING)
-            sample_rate = 16_000
+            sample_rate = 24_000
         result, message = self.forward(x, sample_rate=sample_rate)  # b x 2+nbits
         detected = (
             torch.count_nonzero(torch.gt(result[:, 1, :], 0.5)) / result.shape[-1]
@@ -402,10 +402,10 @@ class AudioSealDetector(torch.nn.Module):
         """
         if sample_rate is None:
             logger.warning(COMPATIBLE_WARNING)
-            sample_rate = 16_000
+            sample_rate = 24_000
         assert sample_rate
-        if sample_rate != 16000:
-            x = julius.resample_frac(x, old_sr=sample_rate, new_sr=16000)
+        if sample_rate != 24000:
+            x = julius.resample_frac(x, old_sr=sample_rate, new_sr=24000)
         result = self.detector(x)  # b x 2+nbits
         # hardcode softmax on 2 first units used for detection
         result[:, :2, :] = torch.softmax(result[:, :2, :], dim=1)

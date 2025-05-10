@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # ================================================================
-# prepare_detector_dataset.py
 #
 # Create partially-watermarked audio + per-sample labels according
 # to AudioSeal augmentation (k = 5 by default).
@@ -16,6 +15,12 @@
 # Each .npy contains uint8 {0,1} with   1 → watermark present  
 #                                       0 → replaced / erased
 # ================================================================
+'''
+python prepare_detector_dataset.py --wm_dir /root/autodl-tmp/LibriSpeech/LibriSpeech_24k_wav_wm/dev-clean \
+--orig_dir /root/autodl-tmp/LibriSpeech/LibriSpeech_24k_wav/dev-clean \
+--output_dir /root/autodl-tmp/LibriSpeech/detector_val_data_k5/
+''' 
+
 import argparse, json, os, random
 from pathlib import Path
 

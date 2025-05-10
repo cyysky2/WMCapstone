@@ -12,7 +12,7 @@
 python train_detector.py \
   --data_dir /root/autodl-tmp/LibriSpeech/detector_data_k5 \
   --epochs   10 \
-  --batch    8 \
+  --batch    4 \
   --lr       1e-4 \
   --device   cuda:0 \
   --save_ckpt detector_audioseal_k5.pt
@@ -24,6 +24,7 @@ import torch
 import torch.nn.functional as F
 from pathlib import Path
 from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 
 from utils import time_str
 from dataset import DetectorDataset
@@ -58,8 +59,9 @@ def run_epoch(model, loader, optimiser, device, train=True):
 
     total_loss, n_frames = 0.0, 0
     torch.set_grad_enabled(train)
-    for audio, gt, mask, sr in loader:
-        audio, gt, mask = audio.to(device), gt.to(device), mask.to(device)
+    pbar = tqdm(loader, leave=False, desc="train" if train else "val")
+    for audio, gt, mask, sr in pbar:
+        audio, gt, mask = audio.unsqueeze(1).to(device), gt.to(device), mask.to(device)
         # detector(x) already does internal resampling if sr != 16k
         logits = model.detector(audio)               # (B, 2, T) since nbits=0
         wm_prob = torch.softmax(logits[:, :2, :], dim=1)[:, 1, :]   # (B, T)
@@ -73,7 +75,10 @@ def run_epoch(model, loader, optimiser, device, train=True):
 
         total_loss += loss.item() * int(mask.sum())
         n_frames   += int(mask.sum())
+        
+        pbar.set_postfix(loss=f"{loss.item():.4f}", running=f"{total_loss/n_frames:.4f}")
 
+    pbar.close()
     return total_loss / n_frames
 
 def main():
@@ -96,7 +101,11 @@ def main():
     val_ld   = DataLoader(val_ds, args.batch, shuffle=False,
                           collate_fn=collate, num_workers=4, pin_memory=True)
 
-    model = AudioSealDetector(nbits=0).to(device)
+    model = AudioSealDetector(
+        nbits=0,                 # 0-bit detector, only label, no message
+        output_dim=128,          # <-- mandatory for SEANetEncoderKeepDimension
+        n_filters=32,          # base channel count inside SEANet
+        ).to(device)
     optimiser = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     print(f"{time_str()}  |  start training on {len(train_ds)} files "

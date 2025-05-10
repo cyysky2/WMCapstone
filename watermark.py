@@ -5,7 +5,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as func
 from torch.nn.utils import weight_norm
-from resnet import ResNet293
+from modules import ResNet293
 
 LRELU_SLOPE = 0.1
 
